@@ -1,0 +1,38 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Audio & Video files (arquivos de mídia pesados não devem ir para o Git)
+*.m4a
+*.mp3
+*.wav
+*.ogg
+*.flac
+*.aac
+*.wma
+*.mp4
+*.mkv
+*.avi
+*.mov
+
+# Ambientes virtuais
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Model cache & HuggingFace
+models--*
+*.bin
+*.pt
+
+# IDE / Editores
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Logs
+*.log
