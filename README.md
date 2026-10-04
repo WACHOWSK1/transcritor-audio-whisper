@@ -43,9 +43,14 @@ pip install -r requirements.txt
 python transcribe.py "caminho/do/seu/audio.m4a"
 ```
 
-### Transcrever todos os áudios de uma pasta:
+### Transcrever todos os áudios de uma pasta e unificar em um único arquivo:
 ```bash
-python transcribe.py "caminho/para/pasta_reunioes/"
+python transcribe.py "caminho/para/pasta_audios/" --merge
+```
+
+### Gerar apenas o arquivo unificado (sem criar arquivos para cada áudio):
+```bash
+python transcribe.py "caminho/para/pasta_audios/" --merge-only --merge-name "sessao_completa"
 ```
 
 ### Escolher tamanho do modelo (`tiny`, `base`, `small`, `medium`, `large-v3`):
@@ -71,11 +76,14 @@ python transcribe.py "video.mp4" --format srt
 | :--- | :--- | :--- |
 | `input` | *(obrigatório)* | Caminho do arquivo ou diretório de áudios. |
 | `--model` | `small` | Tamanho do modelo Whisper (`tiny`, `base`, `small`, `medium`, `large-v3`). |
-| `--device` | `cpu` | Dispositivo de execução (`cpu` ou `cuda`). |
-| `--compute_type` | `int8` | Tipo de quantização (`int8` para CPU, `float16` para GPU). |
+| `--device` | `auto` | Dispositivo de execução (`auto`, `cpu` ou `cuda`). Detecta GPU NVIDIA automaticamente. |
+| `--compute_type` | `auto` | Quantização (`auto`, `int8`, `float16`, `int8_float16`). |
 | `--language` | `pt` | Código do idioma (ex.: `pt`, `en`, `es`). |
 | `--output_dir` | *(mesma pasta do áudio)* | Diretório de destino dos arquivos gerados. |
 | `--format` | `all` | Formato gerado: `all`, `md`, `txt`, ou `srt`. |
+| `--merge` | `False` | Mescla todos os áudios da pasta em um único arquivo consolidado. |
+| `--merge-only` | `False` | Gera apenas o arquivo consolidado unificado (sem arquivos individuais). |
+| `--merge-name` | `transcricao_unificada` | Nome base do arquivo unificado gerado. |
 
 ---
 

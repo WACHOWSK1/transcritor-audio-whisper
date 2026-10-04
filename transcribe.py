@@ -3,6 +3,7 @@ import sys
 import time
 import argparse
 from pathlib import Path
+import ctranslate2
 from faster_whisper import WhisperModel
 
 SUPPORTED_AUDIO_EXTENSIONS = {".m4a", ".mp3", ".wav", ".ogg", ".flac", ".aac", ".wma", ".mp4", ".mkv", ".avi", ".mov"}
@@ -27,8 +28,9 @@ def transcribe_audio(
     model: WhisperModel,
     language: str = "pt",
     output_dir: Path = None,
-    output_formats: list = None
-):
+    output_formats: list = None,
+    save_individual: bool = True
+) -> dict:
     if output_dir is None:
         output_dir = file_path.parent
     else:
@@ -98,50 +100,177 @@ def transcribe_audio(
     stem = file_path.stem
     saved_files = []
 
-    # TXT output
-    if "txt" in output_formats:
-        txt_path = output_dir / f"{stem}_transcricao.txt"
-        with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(f"Arquivo: {file_path.name}\nDuração: {duration_str}\n\n")
-            f.write("\n".join(output_lines))
-        saved_files.append(txt_path)
+    if save_individual:
+        # TXT output
+        if "txt" in output_formats:
+            txt_path = output_dir / f"{stem}_transcricao.txt"
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(f"Arquivo: {file_path.name}\nDuração: {duration_str}\n\n")
+                f.write("\n".join(output_lines))
+            saved_files.append(txt_path)
 
-    # Markdown output
-    if "md" in output_formats:
-        md_path = output_dir / f"{stem}_transcricao.md"
-        md_content = f"""# Transcrição: {stem}
+        # Markdown output
+        if "md" in output_formats:
+            md_path = output_dir / f"{stem}_transcricao.md"
+            formatted_md_lines = "\n".join(markdown_lines)
+            formatted_text_lines = "\n\n".join(text_only_lines)
+            current_time = time.strftime('%d/%m/%Y %H:%M:%S')
+            md_content = f"""# Transcrição: {stem}
 
 - **Arquivo Original:** `{file_path.name}`
 - **Duração:** {duration_str}
 - **Idioma:** {info.language}
-- **Processado em:** {time.strftime('%d/%m/%Y %H:%M:%S')}
+- **Processado em:** {current_time}
 
 ---
 
 ## 📝 Transcrição com Marcações de Tempo
 
-{"\n".join(markdown_lines)}
+{formatted_md_lines}
 
 ---
 
 ## 📄 Texto Contínuo
 
-{"\n\n".join(text_only_lines)}
+{formatted_text_lines}
 """
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(md_content)
+            saved_files.append(md_path)
+
+        # SRT Subtitle output
+        if "srt" in output_formats:
+            srt_path = output_dir / f"{stem}.srt"
+            with open(srt_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(srt_blocks))
+            saved_files.append(srt_path)
+
+        print("\nArquivos salvos:")
+        for path in saved_files:
+            print(f"  -> {path}")
+
+    return {
+        "file_path": file_path,
+        "name": file_path.name,
+        "stem": stem,
+        "duration": info.duration,
+        "duration_fmt": duration_str,
+        "language": info.language,
+        "language_prob": info.language_probability,
+        "segments": segments_data,
+        "output_lines": output_lines,
+        "markdown_lines": markdown_lines,
+        "text_only_lines": text_only_lines,
+        "continuous_text": " ".join(text_only_lines),
+        "saved_files": saved_files
+    }
+
+def save_merged_transcription(
+    results: list,
+    output_dir: Path,
+    base_name: str = "transcricao_unificada",
+    output_formats: list = None
+) -> list:
+    if output_dir is None:
+        output_dir = results[0]["file_path"].parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if output_formats is None:
+        output_formats = ["txt", "md"]
+
+    total_duration_sec = sum(r["duration"] for r in results)
+    total_duration_str = format_timestamp(total_duration_sec)
+    processed_time = time.strftime('%d/%m/%Y %H:%M:%S')
+    saved_files = []
+
+    # Markdown format
+    if "md" in output_formats:
+        md_path = output_dir / f"{base_name}.md"
+        md_lines = [
+            f"# 🎙️ Transcrição Consolidada",
+            "",
+            f"- **Total de Áudios:** {len(results)}",
+            f"- **Duração Total:** {total_duration_str}",
+            f"- **Processado em:** {processed_time}",
+            f"- **Diretório:** `{output_dir}`",
+            "",
+            "---",
+            "",
+            "## 📖 Texto Contínuo Unificado",
+            ""
+        ]
+
+        for idx, res in enumerate(results, 1):
+            md_lines.append(f"### 🕒 Parte {idx}: `{res['name']}` ({res['duration_fmt']})")
+            if res["text_only_lines"]:
+                md_lines.append("\n\n".join(res["text_only_lines"]))
+            else:
+                md_lines.append("*(Nenhuma fala detectada neste trecho)*")
+            md_lines.append("")
+
+        md_lines.append("---")
+        md_lines.append("")
+        md_lines.append("## ⏱️ Transcrição Detalhada com Marcações de Tempo")
+        md_lines.append("")
+
+        for idx, res in enumerate(results, 1):
+            md_lines.append(f"### 📁 [{idx}/{len(results)}] `{res['name']}` (Duração: {res['duration_fmt']})")
+            if res["markdown_lines"]:
+                md_lines.extend(res["markdown_lines"])
+            else:
+                md_lines.append("- *(Nenhuma fala detectada)*")
+            md_lines.append("")
+
         with open(md_path, "w", encoding="utf-8") as f:
-            f.write(md_content)
+            f.write("\n".join(md_lines))
         saved_files.append(md_path)
 
-    # SRT Subtitle output
-    if "srt" in output_formats:
-        srt_path = output_dir / f"{stem}.srt"
-        with open(srt_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(srt_blocks))
-        saved_files.append(srt_path)
+    # TXT format
+    if "txt" in output_formats:
+        txt_path = output_dir / f"{base_name}.txt"
+        txt_lines = [
+            "=" * 70,
+            "TRANSCRICAO CONSOLIDADA",
+            f"Total de Áudios: {len(results)}",
+            f"Duração Total: {total_duration_str}",
+            f"Processado em: {processed_time}",
+            f"Diretório: {output_dir}",
+            "=" * 70,
+            "",
+            "--- TEXTO CONTINUO UNIFICADO ---",
+            ""
+        ]
 
-    print("\nArquivos salvos:")
+        for idx, res in enumerate(results, 1):
+            txt_lines.append(f"[{idx}] {res['name']} ({res['duration_fmt']}):")
+            if res["text_only_lines"]:
+                txt_lines.append("\n".join(res["text_only_lines"]))
+            else:
+                txt_lines.append("(Nenhuma fala detectada)")
+            txt_lines.append("")
+
+        txt_lines.append("=" * 70)
+        txt_lines.append("--- TRANSCRICAO DETALHADA COM MARCACOES DE TEMPO ---")
+        txt_lines.append("=" * 70)
+        txt_lines.append("")
+
+        for idx, res in enumerate(results, 1):
+            txt_lines.append(f"Arquivo [{idx}/{len(results)}]: {res['name']} (Duração: {res['duration_fmt']})")
+            if res["output_lines"]:
+                txt_lines.extend(res["output_lines"])
+            else:
+                txt_lines.append("(Nenhuma fala detectada)")
+            txt_lines.append("")
+
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(txt_lines))
+        saved_files.append(txt_path)
+
+    print("\n" + "=" * 60)
+    print("ARQUIVO(S) UNIFICADO(S) GERADO(S) COM SUCESSO:")
     for path in saved_files:
         print(f"  -> {path}")
+    print("=" * 60 + "\n")
 
     return saved_files
 
@@ -151,11 +280,14 @@ def main():
     )
     parser.add_argument("input", help="Caminho para o arquivo de áudio/vídeo ou pasta de arquivos.")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Tamanho do modelo Whisper (padrão: small).")
-    parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Dispositivo de execução (cpu ou cuda).")
-    parser.add_argument("--compute_type", default="int8", help="Tipo de quantização (int8 para CPU, float16 para CUDA).")
+    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"], help="Dispositivo de execução (auto, cpu ou cuda; padrão: auto).")
+    parser.add_argument("--compute_type", default="auto", help="Tipo de quantização (auto, int8, float16, int8_float16; padrão: auto).")
     parser.add_argument("--language", default="pt", help="Código de idioma (padrão: pt).")
     parser.add_argument("--output_dir", default=None, help="Diretório onde salvar as transcrições.")
     parser.add_argument("--format", default="all", choices=["all", "txt", "md", "srt"], help="Formato de saída desejado.")
+    parser.add_argument("--merge", action="store_true", help="Mescla todas as transcrições da pasta em um único arquivo consolidado.")
+    parser.add_argument("--merge-only", action="store_true", help="Gera apenas o arquivo único consolidado, sem criar arquivos individuais por áudio.")
+    parser.add_argument("--merge-name", default="transcricao_unificada", help="Nome base do arquivo unificado gerado (padrão: transcricao_unificada).")
 
     args = parser.parse_args()
 
@@ -164,18 +296,30 @@ def main():
         print(f"Erro: O caminho '{input_path}' não foi encontrado.")
         sys.exit(1)
 
+    # Resolve device and compute_type
+    device = args.device
+    if device == "auto":
+        cuda_count = ctranslate2.get_cuda_device_count()
+        device = "cuda" if cuda_count > 0 else "cpu"
+
+    compute_type = args.compute_type
+    if compute_type == "auto":
+        compute_type = "float16" if device == "cuda" else "int8"
+
     output_formats = ["txt", "md", "srt"] if args.format == "all" else [args.format]
     output_dir = Path(args.output_dir) if args.output_dir else None
 
     # Load model
-    print(f"\nCarregando modelo Faster-Whisper '{args.model}' no dispositivo '{args.device}' ({args.compute_type})...")
+    print(f"\nCarregando modelo Faster-Whisper '{args.model}' no dispositivo '{device}' ({compute_type})...")
     load_start = time.time()
     try:
-        model = WhisperModel(args.model, device=args.device, compute_type=args.compute_type)
+        model = WhisperModel(args.model, device=device, compute_type=compute_type)
     except Exception as e:
-        if args.device == "cuda":
+        if device == "cuda":
             print(f"Falha ao iniciar com CUDA: {e}. Tentando fallback para CPU...")
-            model = WhisperModel(args.model, device="cpu", compute_type="int8")
+            device = "cpu"
+            compute_type = "int8"
+            model = WhisperModel(args.model, device=device, compute_type=compute_type)
         else:
             raise e
     print(f"Modelo carregado em {time.time() - load_start:.1f}s.")
@@ -184,13 +328,46 @@ def main():
     if input_path.is_file():
         transcribe_audio(input_path, model, language=args.language, output_dir=output_dir, output_formats=output_formats)
     elif input_path.is_dir():
-        files = [p for p in input_path.iterdir() if p.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS]
+        files = sorted(
+            [p for p in input_path.iterdir() if p.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS],
+            key=lambda x: x.name
+        )
         if not files:
             print(f"Nenhum arquivo de áudio com extensões suportadas encontrado em: {input_path}")
             sys.exit(1)
-        print(f"Encontrados {len(files)} arquivo(s) para transcrição.")
+
+        print(f"Encontrados {len(files)} arquivo(s) para transcrição em ordem cronológica:")
+        for idx, f in enumerate(files, 1):
+            print(f"  {idx}. {f.name}")
+
+        results = []
+        save_individual = not args.merge_only
+
         for f in files:
-            transcribe_audio(f, model, language=args.language, output_dir=output_dir, output_formats=output_formats)
+            res = transcribe_audio(
+                f,
+                model,
+                language=args.language,
+                output_dir=output_dir,
+                output_formats=output_formats,
+                save_individual=save_individual
+            )
+            results.append(res)
+
+        if args.merge or args.merge_only:
+            merged_formats = ["txt", "md"] if args.format == "all" else [args.format]
+            # If srt was specified but not txt/md, fallback to md and txt for merged
+            if "srt" in merged_formats and "txt" not in merged_formats and "md" not in merged_formats:
+                merged_formats = ["md", "txt"]
+
+            target_output_dir = output_dir if output_dir else input_path
+            save_merged_transcription(
+                results,
+                output_dir=target_output_dir,
+                base_name=args.merge_name,
+                output_formats=merged_formats
+            )
 
 if __name__ == "__main__":
     main()
+
