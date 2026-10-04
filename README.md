@@ -76,8 +76,8 @@ python transcribe.py "video.mp4" --format srt
 | :--- | :--- | :--- |
 | `input` | *(obrigatório)* | Caminho do arquivo ou diretório de áudios. |
 | `--model` | `small` | Tamanho do modelo Whisper (`tiny`, `base`, `small`, `medium`, `large-v3`). |
-| `--device` | `auto` | Dispositivo de execução (`auto`, `cpu` ou `cuda`). Detecta GPU NVIDIA automaticamente. |
-| `--compute_type` | `auto` | Quantização (`auto`, `int8`, `float16`, `int8_float16`). |
+| `--device` | `cpu` | Dispositivo de execução (`cpu` ou `cuda`). |
+| `--compute_type` | `int8` | Quantização (`int8` para CPU, `float16` para GPU CUDA). |
 | `--language` | `pt` | Código do idioma (ex.: `pt`, `en`, `es`). |
 | `--output_dir` | *(mesma pasta do áudio)* | Diretório de destino dos arquivos gerados. |
 | `--format` | `all` | Formato gerado: `all`, `md`, `txt`, ou `srt`. |

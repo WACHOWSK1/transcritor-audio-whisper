@@ -280,8 +280,8 @@ def main():
     )
     parser.add_argument("input", help="Caminho para o arquivo de áudio/vídeo ou pasta de arquivos.")
     parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3"], help="Tamanho do modelo Whisper (padrão: small).")
-    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"], help="Dispositivo de execução (auto, cpu ou cuda; padrão: auto).")
-    parser.add_argument("--compute_type", default="auto", help="Tipo de quantização (auto, int8, float16, int8_float16; padrão: auto).")
+    parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Dispositivo de execução (cpu ou cuda; padrão: cpu).")
+    parser.add_argument("--compute_type", default="int8", help="Tipo de quantização (int8 para CPU, float16 para CUDA; padrão: int8).")
     parser.add_argument("--language", default="pt", help="Código de idioma (padrão: pt).")
     parser.add_argument("--output_dir", default=None, help="Diretório onde salvar as transcrições.")
     parser.add_argument("--format", default="all", choices=["all", "txt", "md", "srt"], help="Formato de saída desejado.")
@@ -296,15 +296,10 @@ def main():
         print(f"Erro: O caminho '{input_path}' não foi encontrado.")
         sys.exit(1)
 
-    # Resolve device and compute_type
     device = args.device
-    if device == "auto":
-        cuda_count = ctranslate2.get_cuda_device_count()
-        device = "cuda" if cuda_count > 0 else "cpu"
-
     compute_type = args.compute_type
-    if compute_type == "auto":
-        compute_type = "float16" if device == "cuda" else "int8"
+    if device == "cuda" and compute_type == "int8":
+        compute_type = "float16"
 
     output_formats = ["txt", "md", "srt"] if args.format == "all" else [args.format]
     output_dir = Path(args.output_dir) if args.output_dir else None
